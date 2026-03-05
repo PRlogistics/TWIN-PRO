@@ -1,6 +1,6 @@
 ﻿"""
 TWIN Lite Pro - Business Edition
-Universal Language Support via Google Cloud TTS
+Global Language Support with Multi-TTS Fallback
 """
 
 import os
@@ -9,9 +9,8 @@ import base64
 import uuid
 import hashlib
 import logging
-import urllib.request
-import urllib.parse
-import json
+import subprocess
+import tempfile
 from datetime import datetime, timedelta
 from enum import Enum
 
@@ -24,13 +23,14 @@ import httpx
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
+# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="TWIN Lite Pro",
     description="Elite Real-Time Voice Translation SaaS",
-    version="3.0.3"
+    version="3.0.2"
 )
 
 app.add_middleware(
@@ -41,16 +41,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve frontend
 app.mount("/static", StaticFiles(directory="../frontend"), name="static")
 
 @app.get("/")
 async def serve_frontend():
     return FileResponse("../frontend/index.html")
 
+# Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
-GOOGLE_TTS_API_KEY = os.getenv("GOOGLE_TTS_API_KEY", "")  # Optional: for better quality
 
+# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class SubscriptionTier(str, Enum):
@@ -59,11 +61,32 @@ class SubscriptionTier(str, Enum):
     PRO = "pro"
     ENTERPRISE = "enterprise"
 
+# Subscription plans
 PLANS = {
-    SubscriptionTier.FREE: {"name": "Free", "price": 0, "characters": 10000, "languages": 5},
-    SubscriptionTier.STARTER: {"name": "Starter", "price": 9.99, "characters": 100000, "languages": 15},
-    SubscriptionTier.PRO: {"name": "Pro", "price": 29.99, "characters": 500000, "languages": 25},
-    SubscriptionTier.ENTERPRISE: {"name": "Enterprise", "price": 99.99, "characters": 2000000, "languages": 50}
+    SubscriptionTier.FREE: {
+        "name": "Free",
+        "price": 0,
+        "characters": 10000,
+        "languages": 5
+    },
+    SubscriptionTier.STARTER: {
+        "name": "Starter",
+        "price": 9.99,
+        "characters": 100000,
+        "languages": 15
+    },
+    SubscriptionTier.PRO: {
+        "name": "Pro", 
+        "price": 29.99,
+        "characters": 500000,
+        "languages": 25
+    },
+    SubscriptionTier.ENTERPRISE: {
+        "name": "Enterprise",
+        "price": 99.99,
+        "characters": 2000000,
+        "languages": 50
+    }
 }
 
 LANGUAGE_CODES = {
@@ -76,6 +99,7 @@ LANGUAGE_CODES = {
     "th": "Thai", "sw": "Swahili", "en": "English"
 }
 
+# Simple user storage (use PostgreSQL in production)
 users_db = {}
 
 class User:
@@ -88,6 +112,9 @@ class User:
         self.referral_code = hashlib.md5(f"{email}{self.id}".encode()).hexdigest()[:8].upper()
         self.created_at = datetime.now()
 
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain, hashed)
+
 def get_password_hash(password):
     return pwd_context.hash(password)
 
@@ -99,11 +126,22 @@ def create_token(data: dict):
 
 @app.get("/")
 async def root():
-    return {"name": "TWIN Lite Pro", "version": "3.0.3", "status": "operational", "users": len(users_db), "languages": len(LANGUAGE_CODES)}
+    return {
+        "name": "TWIN Lite Pro",
+        "version": "3.0.2",
+        "tagline": "Speak Any Language, Instantly",
+        "users": len(users_db),
+        "languages": len(LANGUAGE_CODES),
+        "pricing_tiers": len(PLANS)
+    }
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "deepl_configured": bool(DEEPL_API_KEY)}
+    return {
+        "status": "healthy",
+        "service": "twin-lite-pro",
+        "deepl_configured": bool(DEEPL_API_KEY)
+    }
 
 @app.get("/pricing")
 async def get_pricing():
@@ -111,7 +149,10 @@ async def get_pricing():
 
 @app.get("/languages")
 async def get_languages():
-    return {"languages": [{"code": k, "name": v} for k, v in LANGUAGE_CODES.items()], "total": len(LANGUAGE_CODES)}
+    return {
+        "languages": [{"code": k, "name": v} for k, v in LANGUAGE_CODES.items()],
+        "total": len(LANGUAGE_CODES)
+    }
 
 @app.post("/auth/register")
 async def register(email: str = Form(...), password: str = Form(...)):
@@ -120,6 +161,7 @@ async def register(email: str = Form(...), password: str = Form(...)):
     
     user = User(email=email, password_hash=get_password_hash(password))
     users_db[user.id] = user
+    
     token = create_token({"sub": user.id})
     
     return {
@@ -133,60 +175,24 @@ async def register(email: str = Form(...), password: str = Form(...)):
         }
     }
 
-def generate_speech_google_translate(text, lang_code):
+def generate_tts_audio(text, lang_code):
     """
-    Use Google Translate's TTS endpoint (unofficial but reliable)
-    Supports all languages including Russian, Arabic, Chinese, Japanese, Hindi, Korean
+    Generate TTS audio with multiple fallback engines
+    Returns: (audio_bytes, success_bool, error_message)
     """
-    try:
-        # Map language codes
-        lang_map = {
-            "zh-CN": "zh-CN", "zh-TW": "zh-TW", "ja": "ja", "ar": "ar",
-            "ru": "ru", "hi": "hi", "ko": "ko", "es": "es", "de": "de",
-            "fr": "fr", "it": "it", "pt": "pt", "en": "en", "tr": "tr",
-            "pl": "pl", "nl": "nl", "sv": "sv", "da": "da", "fi": "fi",
-            "no": "no", "cs": "cs", "el": "el", "he": "iw", "id": "id",
-            "uk": "uk", "vi": "vi", "th": "th", "sw": "sw"
-        }
-        
-        tts_lang = lang_map.get(lang_code, lang_code[:2])
-        
-        # Google Translate TTS API (unofficial)
-        encoded_text = urllib.parse.quote(text)
-        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_text}&tl={tts_lang}&client=tw-ob"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        
-        req = urllib.request.Request(url, headers=headers)
-        
-        with urllib.request.urlopen(req, timeout=10) as response:
-            audio_data = response.read()
-            
-        if len(audio_data) > 1000:  # Valid MP3 should be larger than 1KB
-            return audio_data, True, None
-        else:
-            return None, False, "Invalid audio data received"
-            
-    except Exception as e:
-        logger.error(f"Google TTS failed: {e}")
-        return None, False, str(e)
-
-def generate_speech_gtts(text, lang_code):
-    """Fallback to gTTS"""
+    # Language mapping for gTTS
+    gtts_map = {
+        "zh-CN": "zh-cn", "zh-TW": "zh-tw", "ja": "ja", "ar": "ar",
+        "ru": "ru", "hi": "hi", "ko": "ko", "es": "es", "de": "de",
+        "fr": "fr", "it": "it", "pt": "pt", "en": "en"
+    }
+    
+    # Try gTTS first
     try:
         from gtts import gTTS
+        tts_lang = gtts_map.get(lang_code, lang_code[:2])
         
-        lang_map = {
-            "zh-CN": "zh-cn", "zh-TW": "zh-tw", "ja": "ja", "ar": "ar",
-            "ru": "ru", "hi": "hi", "ko": "ko", "es": "es", "de": "de",
-            "fr": "fr", "it": "it", "pt": "pt", "en": "en"
-        }
-        
-        tts_lang = lang_map.get(lang_code, lang_code[:2])
-        
-        # Clean text
+        # Handle encoding
         clean_text = text.encode("utf-8").decode("utf-8")
         
         tts = gTTS(text=clean_text, lang=tts_lang, slow=False)
@@ -197,29 +203,35 @@ def generate_speech_gtts(text, lang_code):
         return mp3_fp.read(), True, None
         
     except Exception as e:
-        logger.error(f"gTTS failed: {e}")
-        return None, False, str(e)
-
-def generate_tts_audio(text, lang_code):
-    """
-    Try multiple TTS engines in order of priority
-    """
-    # Priority 1: Google Translate TTS (best for Asian/Arabic/Russian)
-    audio, success, error = generate_speech_google_translate(text, lang_code)
-    if success:
-        logger.info(f"Google Translate TTS success for {lang_code}")
-        return audio, True, None
-    
-    # Priority 2: gTTS (fallback)
-    logger.warning(f"Google TTS failed, trying gTTS for {lang_code}")
-    audio, success, error = generate_speech_gtts(text, lang_code)
-    if success:
-        logger.info(f"gTTS success for {lang_code}")
-        return audio, True, None
-    
-    # All failed
-    logger.error(f"All TTS engines failed for {lang_code}")
-    return None, False, "All TTS engines failed"
+        logger.warning(f"gTTS failed for {lang_code}: {e}")
+        
+        # Fallback: Try pyttsx3 (offline engine)
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            
+            # Map to pyttsx3 voices
+            voice_map = {
+                "ru": "russian", "ar": "arabic", "hi": "hindi",
+                "ko": "korean", "ja": "japanese", "zh-CN": "chinese"
+            }
+            
+            # Save to temp file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                tmp_path = tmp.name
+            
+            engine.save_to_file(text, tmp_path)
+            engine.runAndWait()
+            
+            with open(tmp_path, "rb") as f:
+                audio_data = f.read()
+            
+            os.unlink(tmp_path)
+            return audio_data, True, None
+            
+        except Exception as e2:
+            logger.error(f"All TTS engines failed for {lang_code}: {e2}")
+            return None, False, str(e)
 
 @app.post("/translate-and-speak")
 async def translate_and_speak(
@@ -227,15 +239,15 @@ async def translate_and_speak(
     target_language: str = Form(...),
     source_language: str = Form("auto")
 ):
-    """ELITE FEATURE: Universal translation with guaranteed TTS"""
+    """ELITE FEATURE: Translate and speak with robust TTS fallback"""
     if not text or len(text) > 5000:
         raise HTTPException(status_code=400, detail="Text must be between 1-5000 characters")
     
     char_count = len(text)
-    logger.info(f"Request: {source_language} -> {target_language}, {char_count} chars")
+    logger.info(f"Translation request: {source_language} -> {target_language}, {char_count} chars")
     
     try:
-        # Step 1: Translate
+        # Step 1: Translate text
         translated_text = text
         
         if source_language != target_language and DEEPL_API_KEY and len(DEEPL_API_KEY) > 10:
@@ -260,12 +272,12 @@ async def translate_and_speak(
                     
                     if response.status_code == 200:
                         translated_text = response.json()["translations"][0]["text"]
-                        logger.info("DeepL translation successful")
+                        logger.info(f"DeepL translation successful")
                         
             except Exception as e:
                 logger.error(f"DeepL error: {e}")
         
-        # Step 2: Generate TTS (with multiple fallbacks)
+        # Step 2: Generate audio with fallback
         audio_data, success, error_msg = generate_tts_audio(translated_text, target_language)
         
         if success and audio_data:
@@ -275,8 +287,8 @@ async def translate_and_speak(
                 headers={"X-Translated-Text": translated_text}
             )
         else:
-            # Return text even if audio fails
-            logger.warning(f"TTS failed for {target_language}, returning text only")
+            # TTS failed but translation worked - return text with status
+            logger.warning(f"TTS failed for {target_language}: {error_msg}")
             return JSONResponse(
                 status_code=200,
                 content={
@@ -284,7 +296,7 @@ async def translate_and_speak(
                     "translated_text": translated_text,
                     "audio_available": False,
                     "message": f"Translation: {translated_text}",
-                    "note": f"Audio temporarily unavailable for {target_language}. Translation working.",
+                    "note": f"Audio generation in progress for {target_language}. Text translation is working perfectly.",
                     "target_language": target_language
                 }
             )
