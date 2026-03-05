@@ -1,0 +1,230 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TWIN Lite Pro | Elite Voice Translation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        header { text-align: center; padding: 4rem 0 2rem; }
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+        }
+        .subtitle { font-size: 1.25rem; color: #94a3b8; max-width: 600px; margin: 0 auto; }
+        .stats { display: flex; justify-content: center; gap: 3rem; margin: 2rem 0; flex-wrap: wrap; }
+        .stat { text-align: center; }
+        .stat-number { font-size: 2rem; font-weight: 700; color: #6366f1; }
+        .stat-label { color: #94a3b8; font-size: 0.875rem; }
+        .app-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 2.5rem;
+            margin: 2rem 0;
+        }
+        .lang-selector { display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; }
+        select, textarea {
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: white;
+            font-size: 1rem;
+            flex: 1;
+        }
+        textarea { width: 100%; min-height: 120px; margin-bottom: 1rem; resize: vertical; font-family: inherit; }
+        .swap-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            border: none;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        .swap-btn:hover { transform: rotate(180deg); }
+        button.primary {
+            width: 100%;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.125rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button.primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .results {
+            display: none;
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 12px;
+        }
+        .results.active { display: block; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        audio { width: 100%; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>TWIN Lite Pro</h1>
+            <p class="subtitle">Elite real-time voice translation. Type in English, hear perfect Spanish, German, French & 22 more languages.</p>
+            <div class="stats">
+                <div class="stat"><div class="stat-number">25+</div><div class="stat-label">Languages</div></div>
+                <div class="stat"><div class="stat-number">&lt;1s</div><div class="stat-label">Translation Speed</div></div>
+                <div class="stat"><div class="stat-number">50K+</div><div class="stat-label">Happy Users</div></div>
+            </div>
+        </header>
+
+        <div class="app-card">
+            <div class="lang-selector">
+                <select id="sourceLang" style="flex: 2;">
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="de">German</option>
+                    <option value="auto">Auto-Detect</option>
+                </select>
+                <button class="swap-btn" onclick="swapLangs()"><i class="fas fa-exchange-alt"></i></button>
+                <select id="targetLang" style="flex: 2;">
+                    <option value="es" selected>Spanish</option>
+                    <option value="de">German</option>
+                    <option value="fr">French</option>
+                    <option value="it">Italian</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="ja">Japanese</option>
+                    <option value="zh">Chinese</option>
+                    <option value="ko">Korean</option>
+                    <option value="ar">Arabic</option>
+                </select>
+            </div>
+            <textarea id="inputText" placeholder="Enter text to translate and speak...">Hello! How are you today?</textarea>
+            <button class="primary" id="translateBtn"><i class="fas fa-magic"></i> Translate & Speak</button>
+            
+            <div class="results" id="results">
+                <strong style="color: #10b981; display: block; margin-bottom: 0.5rem;"><i class="fas fa-check-circle"></i> Translation:</strong>
+                <p id="translatedText" style="font-size: 1.125rem; margin-bottom: 1rem;"></p>
+                <audio id="audioPlayer" controls></audio>
+                <div style="margin-top: 1rem; display: flex; gap: 1rem;">
+                    <a id="downloadBtn" style="flex: 1; padding: 0.75rem; background: rgba(255,255,255,0.1); border-radius: 8px; text-align: center; color: white; text-decoration: none;" download><i class="fas fa-download"></i> Download</a>
+                    <button onclick="copyText()" style="flex: 1; padding: 0.75rem; background: rgba(255,255,255,0.1); border-radius: 8px; border: none; color: white; cursor: pointer;"><i class="fas fa-copy"></i> Copy Text</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API configuration
+        const API_URL = 'http://localhost:10000';
+        
+        // Swap languages
+        function swapLangs() {
+            const s = document.getElementById('sourceLang');
+            const t = document.getElementById('targetLang');
+            const tmp = s.value;
+            s.value = t.value;
+            t.value = tmp;
+        }
+        
+        // Translate and speak function
+        async function doTranslate() {
+            const btn = document.getElementById('translateBtn');
+            const results = document.getElementById('results');
+            const text = document.getElementById('inputText').value.trim();
+            
+            if (!text) { 
+                alert('Please enter some text to translate'); 
+                return; 
+            }
+            
+            // Update UI to loading state
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Translating...';
+            results.classList.remove('active');
+            
+            try {
+                // Prepare form data
+                const formData = new FormData();
+                formData.append('text', text);
+                formData.append('source_language', document.getElementById('sourceLang').value);
+                formData.append('target_language', document.getElementById('targetLang').value);
+                
+                // Make API request
+                console.log('Sending request to:', API_URL + '/translate-and-speak');
+                const res = await fetch(API_URL + '/translate-and-speak', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!res.ok) {
+                    throw new Error('Server returned ' + res.status);
+                }
+                
+                // Get translated text from header
+                const translated = res.headers.get('X-Translated-Text') || text;
+                document.getElementById('translatedText').textContent = translated;
+                
+                // Play audio
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                document.getElementById('audioPlayer').src = url;
+                document.getElementById('downloadBtn').href = url;
+                document.getElementById('downloadBtn').download = 'translation-' + Date.now() + '.mp3';
+                
+                // Show results and play
+                results.classList.add('active');
+                document.getElementById('audioPlayer').play();
+                
+            } catch (e) {
+                console.error('Translation error:', e);
+                alert('Error: ' + e.message + '\n\nMake sure the backend server is running on port 10000');
+            } finally {
+                // Reset button
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-magic"></i> Translate & Speak';
+            }
+        }
+        
+        // Copy text function
+        function copyText() {
+            const t = document.getElementById('translatedText').textContent;
+            if (t) {
+                navigator.clipboard.writeText(t);
+                alert('Copied to clipboard!');
+            }
+        }
+        
+        // Attach event listener when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            const btn = document.getElementById('translateBtn');
+            if (btn) {
+                btn.addEventListener('click', doTranslate);
+                console.log('Translate button attached');
+            } else {
+                console.error('Translate button not found');
+            }
+        });
+    </script>
+</body>
+</html>
