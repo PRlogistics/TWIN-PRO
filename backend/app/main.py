@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
@@ -214,7 +214,9 @@ async def translate_and_speak(
             tts_lang = gtts_lang_map.get(target_language, target_language[:2])
             
             logger.info(f"Generating TTS for language: {tts_lang}")
-            tts = gTTS(text=translated_text, lang=tts_lang, slow=False)
+            # Ensure proper encoding for gTTS
+            encoded_text = translated_text.encode("utf-8").decode("utf-8")
+            tts = gTTS(text=encoded_text, lang=tts_lang, slow=False)
             
             mp3_fp = io.BytesIO()
             tts.write_to_fp(mp3_fp)
@@ -252,5 +254,6 @@ async def translate_and_speak(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000)
+
 
 
