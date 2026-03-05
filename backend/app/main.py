@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="TWIN Lite Pro",
     description="Elite Real-Time Voice Translation SaaS",
-    version="3.0.3"
+    version="3.0.5"
 )
 
 app.add_middleware(
@@ -317,3 +317,4 @@ async def upload_voice(audio: UploadFile = File(...), language: str = Form("en")
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000)
+
