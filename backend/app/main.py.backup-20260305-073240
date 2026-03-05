@@ -147,28 +147,20 @@ async def translate_and_speak(
     target_language: str = Form(...),
     source_language: str = Form("auto")
 ):
-    """ELITE FEATURE: Translate and speak with global language support"""
+    """Translate text and generate speech"""
     if not text or len(text) > 5000:
         raise HTTPException(status_code=400, detail="Text must be between 1-5000 characters")
     
-    char_count = len(text)
-    logger.info(f"Translation request: {source_language} -> {target_language}, {char_count} chars")
-    
     try:
-        # Step 1: Translate text using DeepL if available
         translated_text = text
         
+        # Only translate if languages differ and API key exists
         if source_language != target_language and DEEPL_API_KEY and len(DEEPL_API_KEY) > 10:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    # Map language codes for DeepL compatibility
-                    deepl_target = target_language.upper()
-                    if target_language == "zh-CN":
-                        deepl_target = "ZH"  # DeepL uses ZH for Chinese
-                    
                     payload = {
                         "text": text,
-                        "target_lang": deepl_target
+                        "target_lang": target_language.upper()
                     }
                     if source_language != "auto":
                         payload["source_lang"] = source_language.upper()
@@ -178,79 +170,41 @@ async def translate_and_speak(
                         headers={"Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"},
                         data=payload
                     )
-                    
                     if response.status_code == 200:
                         translated_text = response.json()["translations"][0]["text"]
-                        logger.info(f"DeepL translation successful")
+                        logger.info(f"Translated {len(text)} chars to {target_language}")
                     else:
-                        logger.warning(f"DeepL API error: {response.status_code}, using original text")
-                        
+                        logger.warning(f"DeepL API error: {response.status_code}")
             except Exception as e:
-                logger.error(f"DeepL translation error: {e}")
-                # Continue with original text if translation fails
+                logger.error(f"Translation error: {e}")
+                # Fallback: use original text
         
-        # Step 2: Generate speech with gTTS
+        # Generate speech
         try:
             from gtts import gTTS
-            
-            # Language code mapping for gTTS compatibility
-            gtts_lang_map = {
-                "zh-CN": "zh-cn",  # Mandarin Chinese
-                "zh-TW": "zh-tw",  # Traditional Chinese
-                "ja": "ja",        # Japanese
-                "ar": "ar",        # Arabic
-                "ru": "ru",        # Russian
-                "hi": "hi",        # Hindi
-                "ko": "ko",        # Korean
-                "es": "es",        # Spanish
-                "de": "de",        # German
-                "fr": "fr",        # French
-                "it": "it",        # Italian
-                "pt": "pt",        # Portuguese
-                "en": "en"         # English
-            }
-            
-            # Get mapped language code or use first 2 chars as fallback
-            tts_lang = gtts_lang_map.get(target_language, target_language[:2])
-            
-            logger.info(f"Generating TTS for language: {tts_lang}")
-            tts = gTTS(text=translated_text, lang=tts_lang, slow=False)
-            
+            tts = gTTS(text=translated_text, lang=target_language[:2], slow=False)
             mp3_fp = io.BytesIO()
             tts.write_to_fp(mp3_fp)
             mp3_fp.seek(0)
             
-            # Success - return audio with translated text
             return StreamingResponse(
                 mp3_fp,
                 media_type="audio/mpeg",
                 headers={"X-Translated-Text": translated_text}
             )
-            
-        except Exception as tts_error:
-            # TTS failed but translation worked - return text with error info
-            logger.error(f"TTS generation failed for {target_language}: {tts_error}")
-            
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "translated_text": translated_text,
-                    "audio_available": False,
-                    "message": f"Translation successful! Audio playback is temporarily unavailable for {target_language}, but text translation is working perfectly.",
-                    "target_language": target_language,
-                    "character_count": char_count
-                }
-            )
+        except ImportError:
+            raise HTTPException(status_code=500, detail="TTS module not available")
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+            raise HTTPException(status_code=500, detail="Speech generation failed")
             
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in translate_and_speak: {e}")
-        raise HTTPException(status_code=500, detail=f"Processing error: {str(e)}")
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000)
-
 
