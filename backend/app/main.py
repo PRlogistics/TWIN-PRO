@@ -12,7 +12,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from jose import jwt
@@ -35,6 +36,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve frontend static files
+app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+
+@app.get("/")
+async def serve_frontend():
+    return FileResponse("../frontend/index.html")
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -199,3 +207,4 @@ async def translate_and_speak(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000)
+
