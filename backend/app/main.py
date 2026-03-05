@@ -35,7 +35,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
+# Serve frontend static files
+app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+
+@app.get("/")
+async def serve_frontend():
+    return FileResponse("../frontend/index.html")
 # Configuration with fallbacks
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-immediately")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
