@@ -23,7 +23,7 @@ from passlib.context import CryptContext
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="TWIN Lite Pro", version="3.0.5")
+app = FastAPI(title="TWIN Lite Pro", version="3.0.6")
 
 app.add_middleware(
     CORSMiddleware,
@@ -166,3 +166,4 @@ async def supported_crypto():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000)
+

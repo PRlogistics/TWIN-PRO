@@ -5,6 +5,3 @@ gTTS==2.5.1
 httpx==0.26.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.0
-
-qrcode==7.4.2
-pillow==10.2.0
