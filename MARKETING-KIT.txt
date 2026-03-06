@@ -1,0 +1,66 @@
+﻿TWIN LITE PRO - MARKETING KIT
+
+🎯 TAGLINES:
+• "Speak Any Language, Instantly"
+• "Break Language Barriers in Seconds"
+• "The World's Smartest Pocket Translator"
+• "18 Languages, One Tap"
+
+📱 APP STORE DESCRIPTION:
+TWIN Lite Pro is the elite real-time voice translation app that breaks language barriers instantly. Perfect for travelers, business professionals, and language learners.
+
+✨ KEY FEATURES:
+• 18 Languages Supported
+• Real-time Voice Translation
+• High-Quality Text-to-Speech
+• Crypto & Card Payments
+• Translation History
+• Works Offline (Premium)
+
+🌍 LANGUAGES:
+English, Spanish, German, French, Italian, Portuguese, Dutch, Swedish, Danish, Norwegian, Finnish, Czech, Polish, Romanian, Hungarian, Slovak, Bulgarian, Croatian
+
+💰 PRICING:
+• Free: 10K characters/month
+• Starter: $9.99/month (100K characters)
+• Pro: $29.99/month (500K characters + API)
+• Enterprise: $99.99/month (Unlimited)
+
+📸 SCREENSHOT CAPTIONS:
+1. "Translate voice in real-time across 18 languages"
+2. "Crystal clear text-to-speech audio"
+3. "Pay with crypto or card - your choice"
+4. "Save translation history for easy access"
+5. "Professional-grade accuracy with DeepL"
+
+🐦 SOCIAL POSTS:
+
+Twitter/LinkedIn:
+"Just launched TWIN Lite Pro! 🚀 
+Real-time voice translation for 18 languages.
+Speak any language instantly.
+Try it free: https://twin-pro.onrender.com
+#translation #language #travel #business"
+
+Reddit (r/SideProject):
+"[Showoff Saturday] Built a voice translation app with 18 languages and crypto payments. Would love your feedback!"
+
+Product Hunt:
+"TWIN Lite Pro - Speak any language instantly"
+Tagline: "Real-time voice translation with crypto payments"
+
+📧 EMAIL TEMPLATE:
+Subject: Introducing TWIN Lite Pro - Break Language Barriers
+
+Hi [Name],
+
+I'm excited to introduce TWIN Lite Pro, the voice translation app that helps you communicate in 18 languages instantly.
+
+Whether you're traveling, doing business internationally, or learning a new language, TWIN Lite Pro makes it effortless.
+
+🎁 Launch Special: 50% off first month with code LAUNCH50
+
+Try it free: https://twin-pro.onrender.com
+
+Best regards,
+[Your Name]
