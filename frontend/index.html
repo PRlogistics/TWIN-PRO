@@ -358,11 +358,141 @@
         }
     </script>
     <!-- TWIN PRO FEATURES -->
-    <script src="conversation-mode.js"></script>
-    <script src="turbo-mode.js"></script>
-    <script src="twin-pro-widget.js"></script>
+    
+    
+    
+
+    <!-- TWIN PRO WIDGET - INLINE FOR RELIABILITY -->
+    <script>
+    (function() {
+        // Create styles
+        const style = document.createElement("style");
+        style.textContent = `
+            #twin-pro-fab {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                width: 56px;
+                height: 56px;
+                background: linear-gradient(135deg, #6366f1, #ec4899);
+                border-radius: 50%;
+                box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+                cursor: pointer;
+                z-index: 99999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 28px;
+                color: white;
+                border: 3px solid rgba(255,255,255,0.2);
+                transition: all 0.3s ease;
+            }
+            #twin-pro-fab:hover { 
+                transform: scale(1.1); 
+                box-shadow: 0 6px 20px rgba(99,102,241,0.6);
+            }
+            #twin-pro-menu {
+                position: fixed;
+                bottom: 85px;
+                right: 20px;
+                width: 260px;
+                background: #0f172a;
+                border: 1px solid #334155;
+                border-radius: 16px;
+                padding: 16px;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+                z-index: 99998;
+                display: none;
+                color: white;
+                font-family: system-ui, -apple-system, sans-serif;
+            }
+            #twin-pro-menu.show { display: block !important; }
+            .pro-item {
+                padding: 12px;
+                margin: 8px 0;
+                background: linear-gradient(135deg, #1e293b, #334155);
+                border-radius: 10px;
+                cursor: pointer;
+                transition: all 0.2s;
+                border: 1px solid transparent;
+            }
+            .pro-item:hover { 
+                border-color: #6366f1; 
+                transform: translateX(4px);
+            }
+            .pro-badge {
+                float: right;
+                background: linear-gradient(135deg, #fbbf24, #f59e0b);
+                color: #000;
+                font-size: 10px;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-weight: bold;
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Create button
+        const btn = document.createElement("div");
+        btn.id = "twin-pro-fab";
+        btn.innerHTML = "✦";
+        btn.onclick = function() {
+            const menu = document.getElementById("twin-pro-menu");
+            menu.classList.toggle("show");
+        };
+        
+        // Create menu
+        const menu = document.createElement("div");
+        menu.id = "twin-pro-menu";
+        menu.innerHTML = `
+            <div style="font-size: 14px; color: #6366f1; margin-bottom: 12px; font-weight: 600;">
+                ✦ PRO FEATURES
+            </div>
+            <div class="pro-item" onclick="alert('🎙️ Live Conversation Mode\n\nTwo-way voice translation for face-to-face conversations.\n\nComing in next update!')">
+                🎙️ Live Conversation <span class="pro-badge">SOON</span>
+            </div>
+            <div class="pro-item" onclick="alert('🚀 Turbo Speed Mode\n\nInstant translations with smart caching.\n\nComing in next update!')">
+                🚀 Turbo Speed <span class="pro-badge">SOON</span>
+            </div>
+            <div class="pro-item" onclick="alert('📷 Document Scanner\n\nOCR text extraction from images.\n\nComing in next update!')">
+                📷 Scan Document <span class="pro-badge">SOON</span>
+            </div>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #334155; text-align: center;">
+                <a href="#" onclick="document.getElementById('twin-pro-menu').classList.remove('show'); document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'}); return false;" 
+                   style="color: #6366f1; text-decoration: none; font-size: 13px; font-weight: 600;">
+                    Upgrade to Pro →
+                </a>
+            </div>
+        `;
+        
+        // Add to body when ready
+        function addWidget() {
+            if (document.body) {
+                document.body.appendChild(btn);
+                document.body.appendChild(menu);
+                console.log("✦ TWIN Pro Widget loaded!");
+            } else {
+                setTimeout(addWidget, 100);
+            }
+        }
+        
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", addWidget);
+        } else {
+            addWidget();
+        }
+        
+        // Close when clicking outside
+        document.addEventListener("click", function(e) {
+            if (!btn.contains(e.target) && !menu.contains(e.target)) {
+                menu.classList.remove("show");
+            }
+        });
+    })();
+    </script>
 </body>
 </html>
+
 
 
 
