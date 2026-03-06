@@ -1,37 +1,29 @@
 ﻿"""
 TWIN Lite Pro - Business Edition
-Universal Language Support via Google Cloud TTS
+With Crypto Payments
 """
 
 import os
 import io
-import base64
 import uuid
 import hashlib
 import logging
-import urllib.request
-import urllib.parse
-import json
 from datetime import datetime, timedelta
 from enum import Enum
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Request
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 import httpx
-from jose import JWTError, jwt
+from jose import jwt
 from passlib.context import CryptContext
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="TWIN Lite Pro",
-    description="Elite Real-Time Voice Translation SaaS",
-    version="3.0.5"
-)
+app = FastAPI(title="TWIN Lite Pro", version="3.0.5")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,277 +39,81 @@ app.mount("/static", StaticFiles(directory="../frontend"), name="static")
 async def serve_frontend():
     return FileResponse("../frontend/index.html")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this")
+SECRET_KEY = os.getenv("SECRET_KEY", "change-this")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
-GOOGLE_TTS_API_KEY = os.getenv("GOOGLE_TTS_API_KEY", "")  # Optional: for better quality
-
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-class SubscriptionTier(str, Enum):
-    FREE = "free"
-    STARTER = "starter"
-    PRO = "pro"
-    ENTERPRISE = "enterprise"
-
-PLANS = {
-    SubscriptionTier.FREE: {"name": "Free", "price": 0, "characters": 10000, "languages": 5},
-    SubscriptionTier.STARTER: {"name": "Starter", "price": 9.99, "characters": 100000, "languages": 15},
-    SubscriptionTier.PRO: {"name": "Pro", "price": 29.99, "characters": 500000, "languages": 25},
-    SubscriptionTier.ENTERPRISE: {"name": "Enterprise", "price": 99.99, "characters": 2000000, "languages": 50}
-}
 
 LANGUAGE_CODES = {
     "es": "Spanish", "de": "German", "fr": "French", "it": "Italian",
-    "pt": "Portuguese", "nl": "Dutch", "pl": "Polish", "ru": "Russian",
-    "ja": "Japanese", "zh": "Chinese", "ko": "Korean", "ar": "Arabic",
-    "hi": "Hindi", "tr": "Turkish", "sv": "Swedish", "da": "Danish",
-    "fi": "Finnish", "no": "Norwegian", "cs": "Czech", "el": "Greek",
-    "he": "Hebrew", "id": "Indonesian", "uk": "Ukrainian", "vi": "Vietnamese",
-    "th": "Thai", "sw": "Swahili", "en": "English"
+    "pt": "Portuguese", "nl": "Dutch", "sv": "Swedish", "da": "Danish",
+    "cs": "Czech", "id": "Indonesian", "en": "English"
 }
-
-users_db = {}
-
-class User:
-    def __init__(self, email, password_hash):
-        self.id = str(uuid.uuid4())
-        self.email = email
-        self.password_hash = password_hash
-        self.tier = SubscriptionTier.FREE
-        self.characters_used = 0
-        self.referral_code = hashlib.md5(f"{email}{self.id}".encode()).hexdigest()[:8].upper()
-        self.created_at = datetime.now()
 
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-def create_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=30)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
-
 @app.get("/")
 async def root():
-    return {"name": "TWIN Lite Pro", "version": "3.0.3", "status": "operational", "users": len(users_db), "languages": len(LANGUAGE_CODES)}
+    return {"name": "TWIN Lite Pro", "version": "3.0.5", "status": "live", "languages": len(LANGUAGE_CODES)}
 
 @app.get("/health")
 async def health():
     return {"status": "healthy", "deepl_configured": bool(DEEPL_API_KEY)}
 
-@app.get("/pricing")
-async def get_pricing():
-    return {"plans": PLANS, "currency": "USD"}
-
-@app.get("/languages")
-async def get_languages():
-    return {"languages": [{"code": k, "name": v} for k, v in LANGUAGE_CODES.items()], "total": len(LANGUAGE_CODES)}
-
-@app.post("/auth/register")
-async def register(email: str = Form(...), password: str = Form(...)):
-    if email in [u.email for u in users_db.values()]:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    user = User(email=email, password_hash=get_password_hash(password))
-    users_db[user.id] = user
-    token = create_token({"sub": user.id})
-    
-    return {
-        "access_token": token,
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "tier": user.tier.value,
-            "referral_code": user.referral_code,
-            "characters_remaining": PLANS[user.tier]["characters"] - user.characters_used
-        }
-    }
-
-def generate_speech_google_translate(text, lang_code):
-    """
-    Use Google Translate's TTS endpoint (unofficial but reliable)
-    Supports all languages including Russian, Arabic, Chinese, Japanese, Hindi, Korean
-    """
-    try:
-        # Map language codes
-        lang_map = {
-            "zh-CN": "zh-CN", "zh-TW": "zh-TW", "ja": "ja", "ar": "ar",
-            "ru": "ru", "hi": "hi", "ko": "ko", "es": "es", "de": "de",
-            "fr": "fr", "it": "it", "pt": "pt", "en": "en", "tr": "tr",
-            "pl": "pl", "nl": "nl", "sv": "sv", "da": "da", "fi": "fi",
-            "no": "no", "cs": "cs", "el": "el", "he": "iw", "id": "id",
-            "uk": "uk", "vi": "vi", "th": "th", "sw": "sw"
-        }
-        
-        tts_lang = lang_map.get(lang_code, lang_code[:2])
-        
-        # Google Translate TTS API (unofficial)
-        encoded_text = urllib.parse.quote(text)
-        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_text}&tl={tts_lang}&client=tw-ob"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        
-        req = urllib.request.Request(url, headers=headers)
-        
-        with urllib.request.urlopen(req, timeout=10) as response:
-            audio_data = response.read()
-            
-        if len(audio_data) > 1000:  # Valid MP3 should be larger than 1KB
-            return audio_data, True, None
-        else:
-            return None, False, "Invalid audio data received"
-            
-    except Exception as e:
-        logger.error(f"Google TTS failed: {e}")
-        return None, False, str(e)
-
-def generate_speech_gtts(text, lang_code):
-    """Fallback to gTTS"""
+def generate_tts(text, lang):
     try:
         from gtts import gTTS
-        
         lang_map = {
-            "zh-CN": "zh-cn", "zh-TW": "zh-tw", "ja": "ja", "ar": "ar",
-            "ru": "ru", "hi": "hi", "ko": "ko", "es": "es", "de": "de",
-            "fr": "fr", "it": "it", "pt": "pt", "en": "en"
+            "zh-CN": "zh-cn", "ja": "ja", "ar": "ar", "ru": "ru",
+            "hi": "hi", "ko": "ko", "es": "es", "de": "de", "fr": "fr",
+            "it": "it", "pt": "pt", "en": "en", "nl": "nl", "sv": "sv",
+            "da": "da", "cs": "cs", "id": "id"
         }
-        
-        tts_lang = lang_map.get(lang_code, lang_code[:2])
-        
-        # Clean text
-        clean_text = text.encode("utf-8").decode("utf-8")
-        
-        tts = gTTS(text=clean_text, lang=tts_lang, slow=False)
-        mp3_fp = io.BytesIO()
-        tts.write_to_fp(mp3_fp)
-        mp3_fp.seek(0)
-        
-        return mp3_fp.read(), True, None
-        
+        tts_lang = lang_map.get(lang, lang[:2])
+        tts = gTTS(text=text, lang=tts_lang, slow=False)
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        fp.seek(0)
+        return fp.read(), True
     except Exception as e:
-        logger.error(f"gTTS failed: {e}")
-        return None, False, str(e)
-
-def generate_tts_audio(text, lang_code):
-    """
-    Try multiple TTS engines in order of priority
-    """
-    # Priority 1: Google Translate TTS (best for Asian/Arabic/Russian)
-    audio, success, error = generate_speech_google_translate(text, lang_code)
-    if success:
-        logger.info(f"Google Translate TTS success for {lang_code}")
-        return audio, True, None
-    
-    # Priority 2: gTTS (fallback)
-    logger.warning(f"Google TTS failed, trying gTTS for {lang_code}")
-    audio, success, error = generate_speech_gtts(text, lang_code)
-    if success:
-        logger.info(f"gTTS success for {lang_code}")
-        return audio, True, None
-    
-    # All failed
-    logger.error(f"All TTS engines failed for {lang_code}")
-    return None, False, "All TTS engines failed"
+        logger.error(f"TTS error: {e}")
+        return None, False
 
 @app.post("/translate-and-speak")
-async def translate_and_speak(
-    text: str = Form(...),
-    target_language: str = Form(...),
-    source_language: str = Form("auto")
-):
-    """ELITE FEATURE: Universal translation with guaranteed TTS"""
-    if not text or len(text) > 5000:
-        raise HTTPException(status_code=400, detail="Text must be between 1-5000 characters")
-    
-    char_count = len(text)
-    logger.info(f"Request: {source_language} -> {target_language}, {char_count} chars")
+async def translate_and_speak(text: str = Form(...), target_language: str = Form(...), source_language: str = Form("auto")):
+    if not text:
+        raise HTTPException(status_code=400, detail="No text provided")
     
     try:
-        # Step 1: Translate
-        translated_text = text
-        
-        if source_language != target_language and DEEPL_API_KEY and len(DEEPL_API_KEY) > 10:
+        translated = text
+        if DEEPL_API_KEY and source_language != target_language:
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    deepl_target = target_language.upper()
+                async with httpx.AsyncClient() as client:
+                    deepl_lang = target_language.upper()
                     if target_language == "zh-CN":
-                        deepl_target = "ZH"
-                    
-                    payload = {
-                        "text": text,
-                        "target_lang": deepl_target
-                    }
-                    if source_language != "auto":
-                        payload["source_lang"] = source_language.upper()
-                    
-                    response = await client.post(
+                        deepl_lang = "ZH"
+                    r = await client.post(
                         "https://api-free.deepl.com/v2/translate",
                         headers={"Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"},
-                        data=payload
+                        data={"text": text, "target_lang": deepl_lang}
                     )
-                    
-                    if response.status_code == 200:
-                        translated_text = response.json()["translations"][0]["text"]
-                        logger.info("DeepL translation successful")
-                        
+                    if r.status_code == 200:
+                        translated = r.json()["translations"][0]["text"]
             except Exception as e:
-                logger.error(f"DeepL error: {e}")
+                logger.error(f"Translation error: {e}")
         
-        # Step 2: Generate TTS (with multiple fallbacks)
-        audio_data, success, error_msg = generate_tts_audio(translated_text, target_language)
+        audio, success = generate_tts(translated, target_language)
         
-        if success and audio_data:
-            return StreamingResponse(
-                io.BytesIO(audio_data),
-                media_type="audio/mpeg",
-                headers={"X-Translated-Text": translated_text}
-            )
+        if success and audio:
+            return StreamingResponse(io.BytesIO(audio), media_type="audio/mpeg", headers={"X-Translated-Text": translated})
         else:
-            # Return text even if audio fails
-            logger.warning(f"TTS failed for {target_language}, returning text only")
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "translated_text": translated_text,
-                    "audio_available": False,
-                    "message": f"Translation: {translated_text}",
-                    "note": f"Audio temporarily unavailable for {target_language}. Translation working.",
-                    "target_language": target_language
-                }
-            )
+            return JSONResponse({"translated_text": translated, "audio": None, "message": f"Translation: {translated}"})
             
     except Exception as e:
-        logger.error(f"Critical error: {e}")
-        raise HTTPException(status_code=500, detail=f"Service error: {str(e)}")
-
-@app.post("/generate")
-async def generate_speech(text: str = Form(...), language: str = Form("es")):
-    """Basic TTS endpoint"""
-    try:
-        audio_data, success, error = generate_tts_audio(text, language)
-        if success:
-            return StreamingResponse(io.BytesIO(audio_data), media_type="audio/mpeg")
-        else:
-            raise HTTPException(status_code=500, detail=f"TTS failed: {error}")
-    except Exception as e:
+        logger.error(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/upload-voice")
-async def upload_voice(audio: UploadFile = File(...), language: str = Form("en")):
-    content = await audio.read()
-    return {
-        "voice_id": f"voice_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-        "status": "ready",
-        "message": "Voice saved for cloning"
-    }
-
-
-# CRYPTO PAYMENT ENDPOINTS
-from pydantic import BaseModel
-
+# CRYPTO PAYMENT MODELS
 class CryptoPaymentRequest(BaseModel):
     coin: str
     amount_usd: float
@@ -330,7 +126,6 @@ class CryptoPaymentVerify(BaseModel):
 
 @app.post("/crypto/create-payment")
 async def create_crypto_payment(request: CryptoPaymentRequest):
-    """Generate crypto payment invoice"""
     wallets = {
         "btc": os.getenv("BTC_WALLET", "YOUR_BTC_ADDRESS"),
         "eth": os.getenv("ETH_WALLET", "YOUR_ETH_ADDRESS"),
@@ -340,21 +135,7 @@ async def create_crypto_payment(request: CryptoPaymentRequest):
     if request.coin not in wallets:
         raise HTTPException(status_code=400, detail="Unsupported cryptocurrency")
     
-    # Generate unique payment ID
     payment_id = str(uuid.uuid4())
-    
-    # Store in database (simplified - use real DB in production)
-    payment_record = {
-        "id": payment_id,
-        "coin": request.coin,
-        "amount_usd": request.amount_usd,
-        "wallet": wallets[request.coin],
-        "status": "pending",
-        "created_at": datetime.now().isoformat(),
-        "user_email": request.user_email
-    }
-    
-    # TODO: Save to database
     
     return {
         "payment_id": payment_id,
@@ -366,10 +147,6 @@ async def create_crypto_payment(request: CryptoPaymentRequest):
 
 @app.post("/crypto/verify-payment")
 async def verify_crypto_payment(verification: CryptoPaymentVerify):
-    """Verify crypto payment (manual verification for now)"""
-    # TODO: Implement blockchain verification
-    # For now, manual verification via admin panel
-    
     return {
         "status": "received",
         "message": "Payment received and being verified. You will receive confirmation email within 24 hours.",
@@ -378,18 +155,14 @@ async def verify_crypto_payment(verification: CryptoPaymentVerify):
 
 @app.get("/crypto/supported")
 async def supported_crypto():
-    """List supported cryptocurrencies"""
     return {
         "coins": [
-            {"id": "btc", "name": "Bitcoin", "symbol": "BTC", "network": "Bitcoin"},
-            {"id": "eth", "name": "Ethereum", "symbol": "ETH", "network": "ERC20"},
-            {"id": "usdt", "name": "Tether", "symbol": "USDT", "network": "TRC20"}
+            {"id": "btc", "name": "Bitcoin", "symbol": "BTC"},
+            {"id": "eth", "name": "Ethereum", "symbol": "ETH"},
+            {"id": "usdt", "name": "Tether", "symbol": "USDT"}
         ]
     }
 
-
- == "__main__":
+if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000)
-
-
